@@ -1,5 +1,7 @@
 const panel = document.createElement("section");
 panel.className = "panel";
+panel.id = "admin-panel";
+panel.hidden = true;
 panel.style.marginTop = "20px";
 
 panel.innerHTML = `
@@ -29,6 +31,29 @@ const submit = document.getElementById("admin-submit");
 const logout = document.getElementById("admin-logout");
 const status = document.getElementById("admin-status");
 const password = document.getElementById("admin-password");
+
+// Five consecutive clicks/taps of the header logo reveal the login panel.
+// This is a UI shortcut only: Supabase authentication and admin_users checks
+// remain responsible for authorization.
+const brandTrigger = document.getElementById("brand-trigger");
+let logoTaps = 0;
+let lastLogoTap = 0;
+
+brandTrigger?.addEventListener("click", () => {
+  const now = performance.now();
+  logoTaps = now - lastLogoTap > 5000 ? 1 : logoTaps + 1;
+  lastLogoTap = now;
+  if (logoTaps < 5) return;
+
+  logoTaps = 0;
+  panel.hidden = !panel.hidden;
+  brandTrigger.setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const focusTarget = form.hidden ? logout : document.getElementById("admin-email");
+    focusTarget?.focus({ preventScroll: true });
+  }
+});
 
 async function setupLogin() {
   try {
