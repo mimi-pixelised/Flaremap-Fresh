@@ -8,10 +8,9 @@ panel.innerHTML = `
   <button id="push-disable" disabled>Disable notifications</button>
   <button id="push-send" hidden>Send alarm to subscribed devices</button>
   <p id="push-status" role="status">Loading notification controls…</p>
-  <p>On phones, the custom siren can play while FlareMap is open and
-  its audio is active. If the phone is locked or the app is closed, only
-  the phone's system push notification sound is available.
-  After reopening, tap Enable notifications to re-arm audio if needed.</p>
+  <p>The custom siren can play while FlareMap is open. iPhones may block
+  background audio; a locked phone uses its system notification sound.
+  If Test is silent, open Sound troubleshooting under Alarm controls.</p>
 `;
 
 document.querySelector("main").appendChild(panel);
@@ -76,13 +75,9 @@ if ("serviceWorker" in navigator) {
       return;
     }
 
-    if (!window.flaremapAudioReady?.()) {
-      status.textContent = "Push received, but audio is suspended on this phone. " +
-        "Tap Enable notifications again, then keep the app open.";
-      return;
-    }
-
-    status.textContent = "Push received. Starting the foreground alarm…";
+    // Let the HTML audio player attempt playback first. Web Audio state
+    // is not a reliable predictor of HTMLMediaElement playback on phones.
+    status.textContent = "Push received. Attempting the foreground alarm…";
     Promise.resolve(window.flaremapPlayAlarm?.()).then(played => {
       status.textContent = played
         ? "Push received. Foreground alarm started."
