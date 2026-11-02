@@ -255,7 +255,8 @@
   byId("stop").addEventListener("click", () => stopAlarm());
 </script>
 <script defer src="./charts.js"></script>
-<script type="module" src="./admin.js"></script>
-<script type="module" src="./notifications.js"></script>
+<!-- Versioned module URLs avoid stale administrator/notification scripts on mobile. -->
+<script type="module" src="./admin.js?v=20261102-2"></script>
+<script type="module" src="./notifications.js?v=20261102-2"></script>
 </body>
 </html>
