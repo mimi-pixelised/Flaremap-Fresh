@@ -20,8 +20,14 @@ const disable = document.getElementById("push-disable");
 const send = document.getElementById("push-send");
 const status = document.getElementById("push-status");
 
-// Keep privileged broadcast controls inside the hidden admin area.
-document.getElementById("admin-panel")?.appendChild(send);
+// Keep privileged broadcast controls inside the detached administrator panel.
+// Never leave the broadcast button visible in the public notification section.
+if (window.flaremapAdminPanel) {
+  window.flaremapAdminPanel.appendChild(send);
+} else {
+  send.remove();
+  console.warn("Administrator controls are unavailable on this page.");
+}
 
 const SOUND_PREF_KEY = "flaremap-sound-enabled";
 let soundEnabled = false;
