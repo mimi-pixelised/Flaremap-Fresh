@@ -3,9 +3,8 @@ www/
 .DS_Store
 *.log
 
-# Auto-generated targets are built locally until Firebase credentials are set.
-android/
-ios/
+# Keep generated native projects in version control once configured.
+# Only transient build outputs and secrets are ignored.
 assets/
 
 # Keep private signing and cloud credentials out of GitHub.
