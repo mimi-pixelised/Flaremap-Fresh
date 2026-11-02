@@ -7,5 +7,13 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#202020",
-  "description": "FlareMap room monitoring and alarm notifications."
+  "description": "FlareMap room monitoring and alarm notifications.",
+  "icons": [
+    {
+      "src": "./icons/flaremap-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }
