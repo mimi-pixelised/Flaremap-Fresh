@@ -263,15 +263,39 @@ async function startNotifications(client) {
 
     send.onclick = async () => {
       send.disabled = true;
-      status.textContent = "Sending alarm…";
-
+      status.textContent = "Sending to Web Push and native subscribers…";
       try {
-        const result = await callServer({ action: "broadcast" });
-        status.textContent =
-          `Push services accepted ${result.accepted} notification(s); ` +
-          `${result.failed} failed. Acceptance does not confirm device delivery.`;
-      } catch (error) {
-        status.textContent = error.message || "Could not send the alarm.";
+        // These two backends are independent. Always try both; do not claim
+        // that all phones received an alarm merely because FCM accepted it.
+        const results = await Promise.allSettled([
+          callServer({ action: "broadcast" }),
+          (async () => {
+            const { data, error } = await client.functions.invoke(
+              "flaremap-native-broadcast", { body: { action: "broadcast" } }
+            );
+            if (error) {
+              let message = error.message;
+              try {
+                const details = await error.context.json();
+                message = details.error || message;
+              } catch {}
+              throw new Error(message);
+            }
+            if (data?.error) throw new Error(data.error);
+            return data;
+          })()
+        ]);
+        const webResult = results[0];
+        const nativeResult = results[1];
+        const webText = webResult.status === "fulfilled"
+          ? `Web Push accepted ${webResult.value.accepted} request(s)`
+          : "Web Push FAILED: " + webResult.reason.message;
+        const nativeText = nativeResult.status === "fulfilled"
+          ? "Native FCM topic accepted"
+          : "Native FCM FAILED: " + nativeResult.reason.message +
+            " (deploy flaremap-native-broadcast if not configured)";
+        status.textContent = webText + ". " + nativeText +
+          ". Push acceptance does not confirm device delivery.";
       } finally {
         send.disabled = false;
       }

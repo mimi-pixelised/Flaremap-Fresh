@@ -1,0 +1,25 @@
+{
+  "appId": "com.example.flaremap",
+  "appName": "FlareMap",
+  "webDir": "www",
+  "plugins": {
+    "FirebaseMessaging": {
+      "presentationOptions": [
+        "alert",
+        "badge",
+        "sound"
+      ]
+    }
+  },
+  "experimental": {
+    "ios": {
+      "spm": {
+        "packageOptions": {
+          "@capacitor-firebase/messaging": {
+            "symlink": true
+          }
+        }
+      }
+    }
+  }
+}

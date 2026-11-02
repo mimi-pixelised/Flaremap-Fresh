@@ -1,0 +1,19 @@
+node_modules/
+www/
+.DS_Store
+*.log
+
+# Keep generated native projects in version control once configured.
+# Only transient build outputs and secrets are ignored.
+assets/
+
+# Keep private signing and cloud credentials out of GitHub.
+**/service-account*.json
+**/*private*.p8
+**/AuthKey_*.p8
+**/*.keystore
+**/*.jks
+google-services.json
+GoogleService-Info.plist
+.env
+.env.*
