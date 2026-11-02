@@ -55,7 +55,8 @@ if ("serviceWorker" in navigator) {
     // The service worker timestamps receipt. The server may legitimately
     // omit id/created_at, so don't silently discard an otherwise valid push.
     const alert = event.data.alert || {};
-    const receivedAt = Number(event.data.receivedAt);
+    // Old cached service workers may not attach receivedAt yet.
+    const receivedAt = Number(event.data.receivedAt ?? Date.now());
     const age = Date.now() - receivedAt;
     if (!Number.isFinite(age) || age < -30000 || age > 60000) return;
 
@@ -284,9 +285,18 @@ async function startNotifications(client) {
     enable.disabled = false;
     disable.disabled = false;
     const existingSubscription = await registration.pushManager.getSubscription();
-    status.textContent = existingSubscription && Notification.permission === "granted"
-      ? "This browser has a push subscription. Use Enable to register it again if alerts do not arrive."
-      : "Ready. Enable notifications on this device.";
+    if (existingSubscription && Notification.permission === "granted") {
+      // Existing subscribers may have enabled push before foreground sound
+      // preferences were introduced; their permission includes alarm alerts.
+      soundEnabled = true;
+      try {
+        localStorage.setItem(SOUND_PREF_KEY, "yes");
+      } catch {}
+      status.textContent = "Push subscription exists. Tap Enable notifications " +
+        "to re-arm sound now, or tap anywhere in FlareMap before the next alert.";
+    } else {
+      status.textContent = "Ready. Enable notifications on this device.";
+    }
     await updateAdministrator();
   } catch (error) {
     status.textContent = error.message || "Notification setup failed.";
