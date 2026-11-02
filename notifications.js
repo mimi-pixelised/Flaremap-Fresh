@@ -61,11 +61,28 @@ if ("serviceWorker" in navigator) {
 }
 
 async function startNotifications(client) {
+  // On iOS, Web Push is exposed only in installed Home Screen web apps.
+  // iPadOS can report a desktop-style Mac user agent.
+  const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const installedApp = window.matchMedia("(display-mode: standalone)").matches ||
+    navigator.standalone === true;
+
+  if (appleMobile && !installedApp) {
+    status.textContent =
+      "iPhone/iPad setup: Share → Add to Home Screen. " +
+      "Open FlareMap using the new Home Screen icon, " +
+      "then tap Enable notifications here.";
+    return;
+  }
+
   if (!("serviceWorker" in navigator) ||
       !("PushManager" in window) ||
       !("Notification" in window)) {
     status.textContent =
-      "Push is unavailable here. Try Chrome or Edge on your computer first.";
+      appleMobile
+        ? "Push is unavailable here. Use iOS 16.4 or later and open FlareMap from its Home Screen icon."
+        : "Push is unavailable in this browser. Try Safari on Mac, Chrome or Edge on Android/desktop.";
     return;
   }
 
