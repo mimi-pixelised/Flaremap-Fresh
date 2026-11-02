@@ -26,9 +26,10 @@ self.addEventListener("push", event => {
       includeUncontrolled: true
     });
 
+    const receivedAt = Date.now();
     for (const page of windows) {
       if (page.url.startsWith(self.registration.scope)) {
-        page.postMessage({ type: "FLAREMAP_ALARM", alert });
+        page.postMessage({ type: "FLAREMAP_ALARM", alert, receivedAt });
       }
     }
   })());
