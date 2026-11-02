@@ -1,0 +1,20 @@
+node_modules/
+www/
+.DS_Store
+*.log
+
+# Auto-generated targets are built locally until Firebase credentials are set.
+android/
+ios/
+assets/
+
+# Keep private signing and cloud credentials out of GitHub.
+**/service-account*.json
+**/*private*.p8
+**/AuthKey_*.p8
+**/*.keystore
+**/*.jks
+google-services.json
+GoogleService-Info.plist
+.env
+.env.*
