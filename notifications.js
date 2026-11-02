@@ -20,6 +20,9 @@ const disable = document.getElementById("push-disable");
 const send = document.getElementById("push-send");
 const status = document.getElementById("push-status");
 
+// Keep privileged broadcast controls inside the hidden admin area.
+document.getElementById("admin-panel")?.appendChild(send);
+
 const SOUND_PREF_KEY = "flaremap-sound-enabled";
 let soundEnabled = false;
 try {
