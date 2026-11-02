@@ -138,7 +138,8 @@
 
     <footer>
       Readings update every five seconds. No physical sensors are connected.
-      Remote notifications are not connected yet.
+      Enable notifications on each device to receive real push alerts.
+      Alert sounds depend on browser and system settings.
     </footer>
   </main>
 </div>
@@ -158,6 +159,18 @@
   let oscillator;
   let timer;
 
+  // Called by the notification opt-in button during a genuine user gesture.
+  // This unlocks Web Audio without sounding the alarm at setup time.
+  function unlockAlarmAudio() {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) throw new Error("Web Audio is unavailable.");
+    audio ||= new AudioContextConstructor();
+    return audio.resume();
+  }
+
+  window.flaremapUnlockSound = unlockAlarmAudio;
+  window.flaremapAudioReady = () => audio?.state === "running";
+
   function stopAlarm(message = "Alarm stopped.") {
     clearTimeout(timer);
     if (oscillator) {
@@ -173,9 +186,7 @@
   byId("test").addEventListener("click", async () => {
     byId("test").disabled = true;
     try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      audio ||= new AudioContext();
-      await audio.resume();
+      await unlockAlarmAudio();
 
       oscillator = audio.createOscillator();
       const volume = audio.createGain();
