@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FlareMap">
 <link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/flaremap-512.png">
 <style>
   * { box-sizing: border-box; }
   body {
@@ -49,6 +50,9 @@
     white-space: nowrap;
     font-size: 13px;
   }
+  .brand-heading { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .brand-heading h1 { margin-bottom: 6px; }
+  .brand-heading p { margin: 0; }
   .cards {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -78,6 +82,29 @@
     margin: 4px 8px 4px 0;
   }
   button.secondary { background: #edf0f2; color: #222; }
+  .brand-trigger {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    border-radius: 16px;
+    line-height: 0;
+    flex: 0 0 auto;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .brand-trigger img {
+    width: 76px;
+    height: 76px;
+    border-radius: 14px;
+    object-fit: cover;
+  }
+  .charts-panel { margin: 0 0 20px; }
+  .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .chart-card { min-width: 0; border: 1px solid #e2e5e8; border-radius: 16px; padding: 16px; }
+  .chart-card h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+  .chart-card canvas { display: block; width: 100%; height: 160px; }
+  [hidden] { display: none !important; }
   button:disabled { opacity: .5; cursor: default; }
   button:focus-visible { outline: 3px solid #30899a; outline-offset: 3px; }
   #status { min-height: 26px; }
@@ -88,6 +115,8 @@
     main { padding: 24px 18px; }
     header { flex-direction: column; align-items: flex-start; }
     h1 { font-size: 30px; }
+    .brand-trigger img { width: 60px; height: 60px; }
+    .chart-grid { grid-template-columns: 1fr; }
     .cards { grid-template-columns: 1fr; }
   }
 </style>
@@ -105,9 +134,16 @@
 
   <main>
     <header>
-      <div>
-        <h1>FlareMap</h1>
-        <p>Room conditions at a glance.</p>
+      <div class="brand-heading">
+        <button id="brand-trigger" class="brand-trigger" type="button"
+          aria-label="FlareMap logo" aria-controls="admin-panel"
+          aria-expanded="false">
+          <img src="./icons/flaremap-512.png" alt="" width="76" height="76">
+        </button>
+        <div>
+          <h1>FlareMap</h1>
+          <p>Room conditions at a glance.</p>
+        </div>
       </div>
       <span class="badge">Simulated readings</span>
     </header>
@@ -217,6 +253,7 @@
 
   byId("stop").addEventListener("click", () => stopAlarm());
 </script>
+<script defer src="./charts.js"></script>
 <script type="module" src="./admin.js"></script>
 <script type="module" src="./notifications.js"></script>
 </body>
