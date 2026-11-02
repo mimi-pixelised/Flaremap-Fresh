@@ -1,0 +1,11 @@
+{
+  "name": "FlareMap",
+  "short_name": "FlareMap",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#202020",
+  "description": "FlareMap room monitoring and alarm notifications."
+}
