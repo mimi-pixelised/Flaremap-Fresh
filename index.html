@@ -105,6 +105,9 @@
   .chart-card { min-width: 0; border: 1px solid #e2e5e8; border-radius: 16px; padding: 16px; }
   .chart-card h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
   .chart-card canvas { display: block; width: 100%; height: 160px; }
+  .audio-troubleshooting { margin-top: 14px; color: #505960; }
+  .audio-troubleshooting summary { cursor: pointer; font-weight: 600; }
+  .audio-troubleshooting audio { width: 100%; max-width: 480px; display: block; margin-top: 12px; }
   [hidden] { display: none !important; }
   button:disabled { opacity: .5; cursor: default; }
   button:focus-visible { outline: 3px solid #30899a; outline-offset: 3px; }
@@ -176,6 +179,15 @@
       <button id="test">Test 10-second alarm</button>
       <button id="stop" class="secondary" disabled>Stop alarm</button>
       <p id="status" role="status">Ready to test.</p>
+      <details class="audio-troubleshooting">
+        <summary>Sound troubleshooting</summary>
+        <p>If the test is silent, press Play below to try the MP3 in your phone's
+        built-in audio player. If that is silent too, check media volume,
+        Bluetooth/audio output and iOS settings.</p>
+        <audio id="alarm-file" preload="auto" controls src="./audio/alarm.mp3">
+          Your browser does not support HTML audio.
+        </audio>
+      </details>
     </section>
 
     <footer>
@@ -199,165 +211,152 @@
 
   let audio;
   let oscillator;
-  let customAlarmSource;
   let timer;
-  let customAlarmBufferPromise;
   let alarmGeneration = 0;
-  let audioPrimed = false;
 
-  // Use a file hosted on the same origin, never a YouTube embed.
-  // The sound is optional: if the file is missing or cannot be decoded,
-  // we always retain the built-in synthesized alarm.
+  const media = byId("alarm-file");
   const customAlarmUrl = window.FLAREMAP_CONFIG?.ALARM_SOUND_URL || "";
+  if (media && customAlarmUrl) media.src = customAlarmUrl;
 
-  async function getCustomAlarmBuffer() {
-    if (!customAlarmUrl) return null;
-    if (!customAlarmBufferPromise) {
-      customAlarmBufferPromise = (async () => {
-        const response = await fetch(customAlarmUrl, { cache: "no-cache" });
-        if (!response.ok) throw new Error("Audio asset unavailable: " + response.status);
-        const bytes = await response.arrayBuffer();
-        if (!bytes.byteLength) throw new Error("Audio asset is empty.");
-        return await audio.decodeAudioData(bytes);
-      })().catch(error => {
-        console.warn("FlareMap is using the built-in alarm:", error.message);
-        return null;
-      });
-    }
-    return customAlarmBufferPromise;
-  }
-
-  // Called by the notification opt-in button during a genuine user gesture.
-  // This unlocks Web Audio without sounding the alarm at setup time.
+  // This remains available to the push opt-in button as an optional Web
+  // Audio unlock, but HTMLAudioElement.play() is the primary phone player.
   function unlockAlarmAudio() {
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextConstructor) throw new Error("Web Audio is unavailable.");
+    if (!AudioContextConstructor) return Promise.resolve();
     audio ||= new AudioContextConstructor();
-
-    // Prime Web Audio during a genuine tap/click; iOS may otherwise leave
-    // even an apparently running context unable to start future sounds.
-    if (!audioPrimed) {
-      const silence = audio.createBuffer(1, 1, audio.sampleRate);
-      const source = audio.createBufferSource();
-      source.buffer = silence;
-      source.connect(audio.destination);
-      source.start();
-      audioPrimed = true;
+    try {
+      if (audio.state === "running") return Promise.resolve();
+      return audio.resume();
+    } catch (error) {
+      return Promise.reject(error);
     }
-    // Loading does not block the browser's permission/subscription gesture.
-    if (customAlarmUrl) void getCustomAlarmBuffer();
-    if (audio.state === "running") return Promise.resolve();
-    return audio.resume();
   }
-
   window.flaremapUnlockSound = unlockAlarmAudio;
   window.flaremapAudioReady = () => audio?.state === "running";
 
   function stopAlarm(message = "Alarm stopped.") {
     alarmGeneration++;
     clearTimeout(timer);
+    timer = null;
+    if (media) {
+      media.pause();
+      media.loop = false;
+      try { media.currentTime = 0; } catch {}
+    }
     if (oscillator) {
       try { oscillator.stop(); } catch {}
       oscillator.disconnect();
       oscillator = null;
-    }
-    if (customAlarmSource) {
-      try { customAlarmSource.stop(); } catch {}
-      customAlarmSource.disconnect();
-      customAlarmSource = null;
     }
     byId("test").disabled = false;
     byId("stop").disabled = true;
     byId("status").textContent = message;
   }
 
-  // The test button is a genuine gesture, but an incoming push isn't.
-  // Never rely on synthetic button.click() to bypass mobile audio policies.
-  async function playAlarm(origin = "test") {
-    const incoming = origin === "push";
+  function startAlarmTimer(generation) {
+    byId("stop").disabled = false;
+    timer = setTimeout(() => {
+      if (generation === alarmGeneration) {
+        stopAlarm("10-second alarm complete.");
+      }
+    }, 10000);
+  }
 
-    if (byId("test").disabled) return false;
-    if (incoming && document.visibilityState !== "visible") return false;
-    if (incoming && audio?.state !== "running") {
+  async function oscillatorFallback(generation, reason) {
+    try {
+      const ctx = window.AudioContext || window.webkitAudioContext;
+      if (!ctx) throw new Error("Web Audio not supported");
+      audio ||= new ctx();
+      // Safari may block resuming outside a direct gesture, so don't hang.
+      if (audio.state !== "running") {
+        await Promise.race([
+          audio.resume(),
+          new Promise((_, reject) => setTimeout(() =>
+            reject(new Error("Web Audio did not resume")), 2500))
+        ]);
+      }
+      if (generation !== alarmGeneration || audio.state !== "running") {
+        return false;
+      }
+      oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = "sine";
+      gain.gain.value = 0.18;
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      const now = audio.currentTime;
+      for (let j = 0; j < 20; j++) {
+        oscillator.frequency.setValueAtTime(j % 2 ? 650 : 950, now + j * 0.5);
+      }
+      oscillator.start(now);
+      oscillator.stop(now + 10);
       byId("status").textContent =
-        "Push arrived but phone audio is suspended. Open FlareMap and tap " +
-        "Enable notifications again to arm the foreground siren.";
+        "MP3 unavailable. Built-in 10-second alarm playing.";
+      startAlarmTimer(generation);
+      return true;
+    } catch (error) {
+      if (generation === alarmGeneration) {
+        stopAlarm("Phone audio blocked: " + (reason?.message || error.message) +
+          ". Expand Sound troubleshooting and press Play there.");
+      }
       return false;
+    }
+  }
+
+  // This function is intentionally NOT async, so the MP3's play() call
+  // happens in the same click as the user's gesture on iOS/Android.
+  function playAlarm(origin = "test") {
+    if (byId("test").disabled) return Promise.resolve(false);
+    if (origin === "push" && document.visibilityState !== "visible") {
+      return Promise.resolve(false);
     }
 
     const generation = ++alarmGeneration;
     byId("test").disabled = true;
-    byId("status").textContent = incoming
-      ? "Alarm received. Preparing sound…"
-      : "Preparing alarm…";
+    byId("status").textContent = origin === "push"
+      ? "Push received. Attempting phone audio playback…"
+      : "Attempting phone audio playback…";
 
-    try {
-      if (!incoming) {
-        // This function runs directly from the user's test-button gesture.
-        await Promise.race([
-          unlockAlarmAudio(),
-          new Promise((_, reject) => setTimeout(
-            () => reject(new Error("Phone audio did not resume.")), 3500
-          ))
-        ]);
+    if (media && customAlarmUrl) {
+      try {
+        media.pause();
+        try { media.currentTime = 0; } catch {}
+        media.loop = true;
+        media.muted = false;
+        media.volume = 1;
+        const playResult = media.play(); // direct user gesture for tests
+        return Promise.resolve(playResult).then(() => {
+          if (generation !== alarmGeneration) return false;
+          byId("status").textContent =
+            "MP3 playback started for 10 seconds. If silent, check media volume " +
+            "and use Sound troubleshooting below.";
+          startAlarmTimer(generation);
+          return true;
+        }).catch(error => {
+          if (generation !== alarmGeneration) return false;
+          console.warn("FlareMap MP3 playback failed:", error);
+          media.pause();
+          media.loop = false;
+          return oscillatorFallback(generation, error);
+        });
+      } catch (error) {
+        console.warn("FlareMap MP3 playback failed:", error);
+        return oscillatorFallback(generation, error);
       }
-
-      const buffer = await getCustomAlarmBuffer();
-      if (generation !== alarmGeneration) return false;
-      if (audio?.state !== "running") {
-        throw new Error("Audio is not running. Tap Test alarm to re-enable sound.");
-      }
-
-      const start = audio.currentTime;
-      if (buffer) {
-        customAlarmSource = audio.createBufferSource();
-        customAlarmSource.buffer = buffer;
-        customAlarmSource.loop = true;
-        const volume = audio.createGain();
-        volume.gain.value = 0.3;
-        customAlarmSource.connect(volume);
-        volume.connect(audio.destination);
-        customAlarmSource.start(start);
-        customAlarmSource.stop(start + 10);
-      } else {
-        oscillator = audio.createOscillator();
-        const volume = audio.createGain();
-        oscillator.type = "sine";
-        volume.gain.value = 0.12;
-        oscillator.connect(volume);
-        volume.connect(audio.destination);
-        for (let i = 0; i < 20; i++) {
-          oscillator.frequency.setValueAtTime(i % 2 ? 650 : 950, start + i * 0.5);
-        }
-        oscillator.start(start);
-        oscillator.stop(start + 10);
-      }
-
-      byId("stop").disabled = false;
-      byId("status").textContent =
-        (buffer ? "Custom" : "Built-in") + " alarm playing for 10 seconds…";
-      timer = setTimeout(() => stopAlarm("10-second alarm complete."), 10000);
-      return true;
-    } catch (error) {
-      console.error("FlareMap foreground alarm failed:", error);
-      stopAlarm(
-        "Alarm couldn't play: " + (error.message || "audio blocked") +
-        ". Check phone media volume and try Test alarm."
-      );
-      return false;
     }
+    return oscillatorFallback(generation, new Error("No MP3 file configured"));
   }
 
   window.flaremapPlayAlarm = () => playAlarm("push");
   byId("test").addEventListener("click", () => {
     void playAlarm("test");
   });
-
   byId("stop").addEventListener("click", () => stopAlarm());
+
 </script>
 <script defer src="./charts.js"></script>
 <!-- Versioned module URLs avoid stale administrator/notification scripts on mobile. -->
 <script type="module" src="./admin.js?v=20261102-2"></script>
-<script type="module" src="./notifications.js?v=20261102-mobile-audio"></script>
+<script type="module" src="./notifications.js?v=20261102-html-audio"></script>
 </body>
 </html>
