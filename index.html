@@ -202,6 +202,8 @@
   let customAlarmSource;
   let timer;
   let customAlarmBufferPromise;
+  let alarmGeneration = 0;
+  let audioPrimed = false;
 
   // Use a file hosted on the same origin, never a YouTube embed.
   // The sound is optional: if the file is missing or cannot be decoded,
@@ -231,9 +233,20 @@
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextConstructor) throw new Error("Web Audio is unavailable.");
     audio ||= new AudioContextConstructor();
-    // Start loading the custom sound after a user gesture, without delaying
-    // Safari's push subscription call in the click handler.
+
+    // Prime Web Audio during a genuine tap/click; iOS may otherwise leave
+    // even an apparently running context unable to start future sounds.
+    if (!audioPrimed) {
+      const silence = audio.createBuffer(1, 1, audio.sampleRate);
+      const source = audio.createBufferSource();
+      source.buffer = silence;
+      source.connect(audio.destination);
+      source.start();
+      audioPrimed = true;
+    }
+    // Loading does not block the browser's permission/subscription gesture.
     if (customAlarmUrl) void getCustomAlarmBuffer();
+    if (audio.state === "running") return Promise.resolve();
     return audio.resume();
   }
 
@@ -241,6 +254,7 @@
   window.flaremapAudioReady = () => audio?.state === "running";
 
   function stopAlarm(message = "Alarm stopped.") {
+    alarmGeneration++;
     clearTimeout(timer);
     if (oscillator) {
       try { oscillator.stop(); } catch {}
@@ -257,16 +271,47 @@
     byId("status").textContent = message;
   }
 
-  byId("test").addEventListener("click", async () => {
-    byId("test").disabled = true;
-    try {
-      await unlockAlarmAudio();
+  // The test button is a genuine gesture, but an incoming push isn't.
+  // Never rely on synthetic button.click() to bypass mobile audio policies.
+  async function playAlarm(origin = "test") {
+    const incoming = origin === "push";
 
-      const customBuffer = await getCustomAlarmBuffer();
+    if (byId("test").disabled) return false;
+    if (incoming && document.visibilityState !== "visible") return false;
+    if (incoming && audio?.state !== "running") {
+      byId("status").textContent =
+        "Push arrived but phone audio is suspended. Open FlareMap and tap " +
+        "Enable notifications again to arm the foreground siren.";
+      return false;
+    }
+
+    const generation = ++alarmGeneration;
+    byId("test").disabled = true;
+    byId("status").textContent = incoming
+      ? "Alarm received. Preparing sound…"
+      : "Preparing alarm…";
+
+    try {
+      if (!incoming) {
+        // This function runs directly from the user's test-button gesture.
+        await Promise.race([
+          unlockAlarmAudio(),
+          new Promise((_, reject) => setTimeout(
+            () => reject(new Error("Phone audio did not resume.")), 3500
+          ))
+        ]);
+      }
+
+      const buffer = await getCustomAlarmBuffer();
+      if (generation !== alarmGeneration) return false;
+      if (audio?.state !== "running") {
+        throw new Error("Audio is not running. Tap Test alarm to re-enable sound.");
+      }
+
       const start = audio.currentTime;
-      if (customBuffer) {
+      if (buffer) {
         customAlarmSource = audio.createBufferSource();
-        customAlarmSource.buffer = customBuffer;
+        customAlarmSource.buffer = buffer;
         customAlarmSource.loop = true;
         const volume = audio.createGain();
         volume.gain.value = 0.3;
@@ -279,7 +324,6 @@
         const volume = audio.createGain();
         oscillator.type = "sine";
         volume.gain.value = 0.12;
-
         oscillator.connect(volume);
         volume.connect(audio.destination);
         for (let i = 0; i < 20; i++) {
@@ -288,13 +332,25 @@
         oscillator.start(start);
         oscillator.stop(start + 10);
       }
+
       byId("stop").disabled = false;
       byId("status").textContent =
-        (customBuffer ? "Custom" : "Built-in") + " alarm playing for 10 seconds…";
+        (buffer ? "Custom" : "Built-in") + " alarm playing for 10 seconds…";
       timer = setTimeout(() => stopAlarm("10-second alarm complete."), 10000);
-    } catch {
-      stopAlarm("Audio could not start. Try opening this file in Chrome or Edge.");
+      return true;
+    } catch (error) {
+      console.error("FlareMap foreground alarm failed:", error);
+      stopAlarm(
+        "Alarm couldn't play: " + (error.message || "audio blocked") +
+        ". Check phone media volume and try Test alarm."
+      );
+      return false;
     }
+  }
+
+  window.flaremapPlayAlarm = () => playAlarm("push");
+  byId("test").addEventListener("click", () => {
+    void playAlarm("test");
   });
 
   byId("stop").addEventListener("click", () => stopAlarm());
@@ -302,6 +358,6 @@
 <script defer src="./charts.js"></script>
 <!-- Versioned module URLs avoid stale administrator/notification scripts on mobile. -->
 <script type="module" src="./admin.js?v=20261102-2"></script>
-<script type="module" src="./notifications.js?v=20261102-2"></script>
+<script type="module" src="./notifications.js?v=20261102-mobile-audio"></script>
 </body>
 </html>
