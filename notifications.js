@@ -8,9 +8,10 @@ panel.innerHTML = `
   <button id="push-disable" disabled>Disable notifications</button>
   <button id="push-send" hidden>Send alarm to subscribed devices</button>
   <p id="push-status" role="status">Loading notification controls…</p>
-  <p>One click enables push and prepares the 10-second alarm while FlareMap
-  is open. Testing is optional. Browsers may require another interaction
-  after reloading before custom alarm sound can play.</p>
+  <p>On phones, the custom siren can play while FlareMap is open and
+  its audio is active. If the phone is locked or the app is closed, only
+  the phone's system push notification sound is available.
+  After reopening, tap Enable notifications to re-arm audio if needed.</p>
 `;
 
 document.querySelector("main").appendChild(panel);
@@ -51,21 +52,43 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("message", event => {
     if (event.data?.type !== "FLAREMAP_ALARM") return;
 
-    const alert = event.data.alert;
-    const timestamp = Date.parse(alert?.created_at);
-    const age = Date.now() - timestamp;
+    // The service worker timestamps receipt. The server may legitimately
+    // omit id/created_at, so don't silently discard an otherwise valid push.
+    const alert = event.data.alert || {};
+    const receivedAt = Number(event.data.receivedAt);
+    const age = Date.now() - receivedAt;
+    if (!Number.isFinite(age) || age < -30000 || age > 60000) return;
 
-    if (!alert?.id || !Number.isFinite(age) ||
-        age < -30000 || age > 60000 || seen.has(alert.id)) return;
+    const id = alert.id || `push-${receivedAt}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (seen.size > 100) seen.clear();
 
-    seen.add(alert.id);
-    status.textContent = alert.body || "An alarm was received.";
-
-    const testButton = document.getElementById("test");
-    if (soundEnabled && document.visibilityState === "visible" &&
-        window.flaremapAudioReady?.() && !testButton.disabled) {
-      testButton.click();
+    if (document.visibilityState !== "visible") {
+      status.textContent = "Push received. Background sounds use phone notification settings.";
+      return;
     }
+
+    if (!soundEnabled) {
+      status.textContent = "Push received, but foreground sound is not enabled here. " +
+        "Tap Enable notifications on this phone.";
+      return;
+    }
+
+    if (!window.flaremapAudioReady?.()) {
+      status.textContent = "Push received, but audio is suspended on this phone. " +
+        "Tap Enable notifications again, then keep the app open.";
+      return;
+    }
+
+    status.textContent = "Push received. Starting the foreground alarm…";
+    Promise.resolve(window.flaremapPlayAlarm?.()).then(played => {
+      status.textContent = played
+        ? "Push received. Foreground alarm started."
+        : "Push received, but the alarm could not start. Try Test alarm.";
+    }).catch(error => {
+      status.textContent = "Push received, but audio failed: " + error.message;
+    });
   });
 }
 
