@@ -46,6 +46,9 @@ async function setupLogin() {
       config.SUPABASE_PUBLISHABLE_KEY
     );
 
+window.flaremapClient = client;
+window.dispatchEvent(new Event("flaremap-ready"));
+
     async function checkAdministrator(user) {
       const { data, error } = await client
         .from("admin_users")
