@@ -171,7 +171,8 @@
 
     <section class="panel">
       <h2>Alarm controls</h2>
-      <p>Test a 10-second alarm on this device. Start with your volume low.</p>
+      <p>Test a 10-second alarm on this device. Start with your volume low.
+      FlareMap uses the custom audio file when one is available; otherwise it plays the built-in alarm.</p>
       <button id="test">Test 10-second alarm</button>
       <button id="stop" class="secondary" disabled>Stop alarm</button>
       <p id="status" role="status">Ready to test.</p>
@@ -185,7 +186,7 @@
   </main>
 </div>
 
-<script src="./config.js"></script>
+<script src="./config.js?v=20261102-custom-audio"></script>
 <script>
   const byId = id => document.getElementById(id);
 
@@ -198,7 +199,31 @@
 
   let audio;
   let oscillator;
+  let customAlarmSource;
   let timer;
+  let customAlarmBufferPromise;
+
+  // Use a file hosted on the same origin, never a YouTube embed.
+  // The sound is optional: if the file is missing or cannot be decoded,
+  // we always retain the built-in synthesized alarm.
+  const customAlarmUrl = window.FLAREMAP_CONFIG?.ALARM_SOUND_URL || "";
+
+  async function getCustomAlarmBuffer() {
+    if (!customAlarmUrl) return null;
+    if (!customAlarmBufferPromise) {
+      customAlarmBufferPromise = (async () => {
+        const response = await fetch(customAlarmUrl, { cache: "no-cache" });
+        if (!response.ok) throw new Error("Audio asset unavailable: " + response.status);
+        const bytes = await response.arrayBuffer();
+        if (!bytes.byteLength) throw new Error("Audio asset is empty.");
+        return await audio.decodeAudioData(bytes);
+      })().catch(error => {
+        console.warn("FlareMap is using the built-in alarm:", error.message);
+        return null;
+      });
+    }
+    return customAlarmBufferPromise;
+  }
 
   // Called by the notification opt-in button during a genuine user gesture.
   // This unlocks Web Audio without sounding the alarm at setup time.
@@ -206,6 +231,9 @@
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextConstructor) throw new Error("Web Audio is unavailable.");
     audio ||= new AudioContextConstructor();
+    // Start loading the custom sound after a user gesture, without delaying
+    // Safari's push subscription call in the click handler.
+    if (customAlarmUrl) void getCustomAlarmBuffer();
     return audio.resume();
   }
 
@@ -219,6 +247,11 @@
       oscillator.disconnect();
       oscillator = null;
     }
+    if (customAlarmSource) {
+      try { customAlarmSource.stop(); } catch {}
+      customAlarmSource.disconnect();
+      customAlarmSource = null;
+    }
     byId("test").disabled = false;
     byId("stop").disabled = true;
     byId("status").textContent = message;
@@ -229,24 +262,36 @@
     try {
       await unlockAlarmAudio();
 
-      oscillator = audio.createOscillator();
-      const volume = audio.createGain();
-      oscillator.type = "sine";
-      volume.gain.value = 0.12;
-
-      oscillator.connect(volume);
-      volume.connect(audio.destination);
-
+      const customBuffer = await getCustomAlarmBuffer();
       const start = audio.currentTime;
-      for (let i = 0; i < 20; i++) {
-        oscillator.frequency.setValueAtTime(i % 2 ? 650 : 950, start + i * 0.5);
-      }
+      if (customBuffer) {
+        customAlarmSource = audio.createBufferSource();
+        customAlarmSource.buffer = customBuffer;
+        customAlarmSource.loop = true;
+        const volume = audio.createGain();
+        volume.gain.value = 0.3;
+        customAlarmSource.connect(volume);
+        volume.connect(audio.destination);
+        customAlarmSource.start(start);
+        customAlarmSource.stop(start + 10);
+      } else {
+        oscillator = audio.createOscillator();
+        const volume = audio.createGain();
+        oscillator.type = "sine";
+        volume.gain.value = 0.12;
 
-      oscillator.start(start);
-      oscillator.stop(start + 10);
+        oscillator.connect(volume);
+        volume.connect(audio.destination);
+        for (let i = 0; i < 20; i++) {
+          oscillator.frequency.setValueAtTime(i % 2 ? 650 : 950, start + i * 0.5);
+        }
+        oscillator.start(start);
+        oscillator.stop(start + 10);
+      }
       byId("stop").disabled = false;
-      byId("status").textContent = "Test alarm playing for 10 seconds…";
-      timer = setTimeout(() => stopAlarm("10-second test complete."), 10000);
+      byId("status").textContent =
+        (customBuffer ? "Custom" : "Built-in") + " alarm playing for 10 seconds…";
+      timer = setTimeout(() => stopAlarm("10-second alarm complete."), 10000);
     } catch {
       stopAlarm("Audio could not start. Try opening this file in Chrome or Edge.");
     }
