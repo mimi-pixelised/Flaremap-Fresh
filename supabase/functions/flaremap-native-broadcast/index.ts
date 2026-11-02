@@ -10,7 +10,10 @@ const SOUND_IOS = "flaremap_alarm.wav";
 const SOUND_ANDROID = "flaremap_alarm"; // Android raw resource basename.
 const JSON_HEADERS = {
   "Content-Type": "application/json",
-  "Cache-Control": "no-store"
+  "Cache-Control": "no-store",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
 function respond(status: number, data: unknown) {
@@ -67,6 +70,11 @@ async function firebaseAccessToken(serviceAccount: {
 }
 
 Deno.serve(async request => {
+  // Capacitor WebViews may originate at capacitor://localhost or
+  // http://localhost and must pass a browser CORS preflight.
+  if (request.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: JSON_HEADERS });
+  }
   if (request.method !== "POST") {
     return respond(405, { error: "POST required" });
   }
