@@ -24,13 +24,15 @@ panel.innerHTML = `
   <p id="admin-status" role="status">Loading login…</p>
 `;
 
-document.querySelector("main").appendChild(panel);
+// Keep the entire administrator panel out of the document until unlocked.
+// A hidden attribute alone is not sufficient if older JavaScript gets cached.
+window.flaremapAdminPanel = panel;
 
-const form = document.getElementById("admin-form");
-const submit = document.getElementById("admin-submit");
-const logout = document.getElementById("admin-logout");
-const status = document.getElementById("admin-status");
-const password = document.getElementById("admin-password");
+const form = panel.querySelector("#admin-form");
+const submit = panel.querySelector("#admin-submit");
+const logout = panel.querySelector("#admin-logout");
+const status = panel.querySelector("#admin-status");
+const password = panel.querySelector("#admin-password");
 
 // Five consecutive clicks/taps of the header logo reveal the login panel.
 // This is a UI shortcut only: Supabase authentication and admin_users checks
@@ -46,13 +48,20 @@ brandTrigger?.addEventListener("click", () => {
   if (logoTaps < 5) return;
 
   logoTaps = 0;
-  panel.hidden = !panel.hidden;
-  brandTrigger.setAttribute("aria-expanded", String(!panel.hidden));
-  if (!panel.hidden) {
+  const open = !panel.isConnected;
+  if (open) {
+    document.querySelector("main").appendChild(panel);
+    panel.hidden = false;
+    panel.inert = false;
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    const focusTarget = form.hidden ? logout : document.getElementById("admin-email");
+    const focusTarget = form.hidden ? logout : panel.querySelector("#admin-email");
     focusTarget?.focus({ preventScroll: true });
+  } else {
+    panel.hidden = true;
+    panel.inert = true;
+    panel.remove();
   }
+  brandTrigger.setAttribute("aria-expanded", String(open));
 });
 
 async function setupLogin() {
@@ -98,7 +107,7 @@ window.dispatchEvent(new Event("flaremap-ready"));
 
       try {
         const { data, error } = await client.auth.signInWithPassword({
-          email: document.getElementById("admin-email").value.trim(),
+          email: panel.querySelector("#admin-email").value.trim(),
           password: password.value
         });
 
