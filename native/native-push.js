@@ -18,14 +18,14 @@ const platform = Capacitor.getPlatform();
 const panel = document.createElement("section");
 panel.className = "panel";
 panel.style.marginTop = "20px";
-panel.innerHTML = \`
+panel.innerHTML = `
   <h2>Native notifications</h2>
   <p>Enable background notifications on this device. Alarm sounds come from
   Android/iOS, including when FlareMap is closed, subject to phone settings.</p>
   <button id="native-enable">Enable notifications</button>
   <button id="native-disable" class="secondary">Disable notifications</button>
   <p id="native-status" role="status">Initializing notifications…</p>
-\`;
+`;
 document.querySelector("main").appendChild(panel);
 
 const enable = panel.querySelector("#native-enable");
